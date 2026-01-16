@@ -79,3 +79,44 @@ export async function startBot({ token = null, marketId }) {
 
   return response.data;
 }
+
+// Stops a Betfair streaming bot for a specific marketId
+export async function stopBot({ token = null, marketId }) {
+  const authToken = token || localStorage.getItem("betfairSessionToken");
+  if (!authToken) {
+    throw new Error("Missing session token. Please log in first.");
+  }
+
+  if (!marketId) {
+    throw new Error("marketId is required to stop bot");
+  }
+
+  const response = await axiosInstance.post(
+    "/bot/stop",
+    { marketId },
+    {
+      headers: {
+        "X-Authentication": authToken,
+      },
+    }
+  );
+
+  return response.data;
+}
+
+// Gets the status of bot(s)
+export async function getBotStatus({ token = null, marketId = null }) {
+  const authToken = token || localStorage.getItem("betfairSessionToken");
+  if (!authToken) {
+    throw new Error("Missing session token. Please log in first.");
+  }
+
+  const response = await axiosInstance.get("/bot/status", {
+    params: marketId ? { marketId } : {},
+    headers: {
+      "X-Authentication": authToken,
+    },
+  });
+
+  return response.data;
+}

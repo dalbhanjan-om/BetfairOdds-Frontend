@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { selectToken } from "../../store/slices/authSlice";
-import { listMarketCatalogue, startBot } from "../../services/api";
+import { listMarketCatalogue, startBot, stopBot, getBotStatus } from "../../services/api";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
 import {
   selectMarkets,
@@ -24,7 +24,9 @@ const EventPage = () => {
   const [loadingMarkets, setLoadingMarkets] = useState(false);
   const [marketsError, setMarketsError] = useState(null);
   const [botStarting, setBotStarting] = useState(false);
+  const [botStopping, setBotStopping] = useState(false);
   const [botError, setBotError] = useState(null);
+  const [runningBots, setRunningBots] = useState(new Set()); // Track which marketIds have bots running
 
   // Redirect to listEvents if no event data
   if (!match) {
@@ -80,6 +82,21 @@ const EventPage = () => {
 
     fetchMarkets();
 
+    // Check bot status on mount/refresh
+    const checkBotStatus = async () => {
+      try {
+        const status = await getBotStatus({ token });
+        if (status.activeMarkets && Array.isArray(status.activeMarkets)) {
+          setRunningBots(new Set(status.activeMarkets));
+        }
+      } catch (err) {
+        // Ignore errors when checking status
+        console.error("Failed to check bot status:", err);
+      }
+    };
+
+    checkBotStatus();
+
     return () => {
       isMounted = false;
     };
@@ -96,12 +113,35 @@ const EventPage = () => {
     setBotError(null);
     try {
       await startBot({ token, marketId: selectedMarketId });
+      // Update running bots state
+      setRunningBots((prev) => new Set([...prev, selectedMarketId]));
     } catch (err) {
       const msg =
         err?.response?.data?.error || err.message || "Failed to start bot";
       setBotError(msg);
     } finally {
       setBotStarting(false);
+    }
+  };
+
+  const handleStopBot = async () => {
+    if (!selectedMarketId) return;
+    setBotStopping(true);
+    setBotError(null);
+    try {
+      await stopBot({ token, marketId: selectedMarketId });
+      // Remove from running bots state
+      setRunningBots((prev) => {
+        const next = new Set(prev);
+        next.delete(selectedMarketId);
+        return next;
+      });
+    } catch (err) {
+      const msg =
+        err?.response?.data?.error || err.message || "Failed to stop bot";
+      setBotError(msg);
+    } finally {
+      setBotStopping(false);
     }
   };
 
@@ -178,9 +218,17 @@ const EventPage = () => {
 
           {/* Markets list from market catalogue */}
           <div className="rounded-2xl border border-white/10 bg-white/5 p-5 sm:p-6 shadow-md max-h-[70vh] md:max-h-[75vh] overflow-y-auto flex flex-col">
-            <h2 className="text-lg sm:text-xl font-semibold mb-3 sm:mb-4">
-              Markets
-            </h2>
+            <div className="flex items-center justify-between mb-3 sm:mb-4">
+              <h2 className="text-lg sm:text-xl font-semibold">
+                Markets
+              </h2>
+              {runningBots.size > 0 && (
+                <div className="flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium bg-green-500/20 text-green-300 border border-green-400/30">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span>
+                  <span>{runningBots.size} Bot{runningBots.size !== 1 ? 's' : ''} Running</span>
+                </div>
+              )}
+            </div>
 
           {loadingMarkets && (
             <div className="text-sm text-slate-300">Loading markets…</div>
@@ -203,37 +251,70 @@ const EventPage = () => {
             )}
 
             <ul className="space-y-2 mt-1">
-              {markets.map((m) => (
-                <li key={m.marketId}>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleMarketClick(m.marketId)}
-                      className={`flex-1 text-left px-3 py-2 rounded-lg text-xs sm:text-sm transition border ${
-                        selectedMarketId === m.marketId
-                          ? "bg-amber-500/20 border-amber-400 text-amber-100"
-                          : "bg-white/5 border-white/10 text-slate-100 hover:bg-white/10 hover:border-white/20"
-                      }`}
-                    >
-                      {m.marketName || m.marketId}
-                    </button>
-                    {selectedMarketId === m.marketId && (
+              {markets.map((m) => {
+                const isBotRunning = runningBots.has(m.marketId);
+                const isSelected = selectedMarketId === m.marketId;
+                
+                return (
+                  <li key={m.marketId}>
+                    <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={handleStartBot}
-                        disabled={botStarting}
-                        className={`px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold border whitespace-nowrap transition ${
-                          botStarting
-                            ? "bg-amber-300 border-amber-200 text-white cursor-wait"
-                            : "bg-amber-500 hover:bg-amber-400 text-white border-amber-300"
+                        onClick={() => handleMarketClick(m.marketId)}
+                        className={`flex-1 text-left px-3 py-2 rounded-lg text-xs sm:text-sm transition border relative ${
+                          isSelected
+                            ? "bg-amber-500/20 border-amber-400 text-amber-100"
+                            : "bg-white/5 border-white/10 text-slate-100 hover:bg-white/10 hover:border-white/20"
                         }`}
                       >
-                        {botStarting ? "Starting..." : "Start Bot"}
+                        <div className="flex items-center gap-2">
+                          <span className="flex-1">{m.marketName || m.marketId}</span>
+                          {isBotRunning && (
+                            <span
+                              className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-green-500/20 text-green-300 border border-green-400/30"
+                              title="Bot is running"
+                            >
+                              <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span>
+                              Active
+                            </span>
+                          )}
+                        </div>
                       </button>
-                    )}
-                  </div>
-                </li>
-              ))}
+                      {isSelected && (
+                        <>
+                          {isBotRunning ? (
+                            <button
+                              type="button"
+                              onClick={handleStopBot}
+                              disabled={botStopping}
+                              className={`px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold border whitespace-nowrap transition ${
+                                botStopping
+                                  ? "bg-red-300 border-red-200 text-white cursor-wait"
+                                  : "bg-red-500 hover:bg-red-400 text-white border-red-300"
+                              }`}
+                            >
+                              {botStopping ? "Stopping..." : "Stop Bot"}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={handleStartBot}
+                              disabled={botStarting}
+                              className={`px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold border whitespace-nowrap transition ${
+                                botStarting
+                                  ? "bg-amber-300 border-amber-200 text-white cursor-wait"
+                                  : "bg-amber-500 hover:bg-amber-400 text-white border-amber-300"
+                              }`}
+                            >
+                              {botStarting ? "Starting..." : "Start Bot"}
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           </div>
         </div>
