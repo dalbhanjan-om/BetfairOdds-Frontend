@@ -57,7 +57,7 @@ export async function listMarketCatalogue({ token = null, eventId }) {
 }
 
 // Starts a Betfair streaming bot for a specific marketId
-export async function startBot({ token = null, marketId }) {
+export async function startBot({ token = null, marketId, size = 1, upThreshold = 5, downThreshold = 2 }) {
   const authToken = token || localStorage.getItem("betfairSessionToken");
   if (!authToken) {
     throw new Error("Missing session token. Please log in first.");
@@ -69,7 +69,7 @@ export async function startBot({ token = null, marketId }) {
 
   const response = await axiosInstance.post(
     "/bot/start",
-    { marketId },
+    { marketId, size, upThreshold, downThreshold },
     {
       headers: {
         "X-Authentication": authToken,

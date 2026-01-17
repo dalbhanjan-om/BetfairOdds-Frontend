@@ -27,6 +27,10 @@ const EventPage = () => {
   const [botStopping, setBotStopping] = useState(false);
   const [botError, setBotError] = useState(null);
   const [runningBots, setRunningBots] = useState(new Set()); // Track which marketIds have bots running
+  const [botConfigs, setBotConfigs] = useState(new Map()); // Map<marketId, { size, upThreshold, downThreshold }>
+  const [betSize, setBetSize] = useState("1"); // Default bet size
+  const [upThreshold, setUpThreshold] = useState("5"); // Default: Line moves up >= 5 for BACK (UNDER) bet
+  const [downThreshold, setDownThreshold] = useState("2"); // Default: Line moves down >= 2 for LAY (OVER) bet
 
   // Redirect to listEvents if no event data
   if (!match) {
@@ -86,7 +90,18 @@ const EventPage = () => {
     const checkBotStatus = async () => {
       try {
         const status = await getBotStatus({ token });
-        if (status.activeMarkets && Array.isArray(status.activeMarkets)) {
+        if (status.activeBots) {
+          const marketIds = new Set();
+          const configs = new Map();
+          for (const [marketId, botInfo] of Object.entries(status.activeBots)) {
+            marketIds.add(marketId);
+            if (botInfo.config) {
+              configs.set(marketId, botInfo.config);
+            }
+          }
+          setRunningBots(marketIds);
+          setBotConfigs(configs);
+        } else if (status.activeMarkets && Array.isArray(status.activeMarkets)) {
           setRunningBots(new Set(status.activeMarkets));
         }
       } catch (err) {
@@ -103,18 +118,56 @@ const EventPage = () => {
   }, [dispatch, ev?.id, token]);
 
   const handleMarketClick = (marketId) => {
+    // Reset bet size and thresholds when switching markets (unless it's the same market)
+    if (selectedMarketId !== marketId) {
+      setBetSize("1");
+      setUpThreshold("5");
+      setDownThreshold("2");
+    }
     dispatch(setSelectedMarket(marketId));
     setBotError(null);
   };
 
   const handleStartBot = async () => {
     if (!selectedMarketId) return;
+    const size = parseFloat(betSize);
+    const upThresh = parseFloat(upThreshold);
+    const downThresh = parseFloat(downThreshold);
+    
+    if (isNaN(size) || size <= 0) {
+      setBotError("Please enter a valid bet size (greater than 0)");
+      return;
+    }
+    if (isNaN(upThresh) || upThresh <= 0) {
+      setBotError("Please enter a valid UP threshold (greater than 0)");
+      return;
+    }
+    if (isNaN(downThresh) || downThresh <= 0) {
+      setBotError("Please enter a valid DOWN threshold (greater than 0)");
+      return;
+    }
+    
     setBotStarting(true);
     setBotError(null);
     try {
-      await startBot({ token, marketId: selectedMarketId });
-      // Update running bots state
+      await startBot({ 
+        token, 
+        marketId: selectedMarketId, 
+        size,
+        upThreshold: upThresh,
+        downThreshold: downThresh
+      });
+      // Update running bots state and store configuration
       setRunningBots((prev) => new Set([...prev, selectedMarketId]));
+      setBotConfigs((prev) => {
+        const next = new Map(prev);
+        next.set(selectedMarketId, {
+          size,
+          upThreshold: upThresh,
+          downThreshold: downThresh,
+        });
+        return next;
+      });
     } catch (err) {
       const msg =
         err?.response?.data?.error || err.message || "Failed to start bot";
@@ -130,9 +183,14 @@ const EventPage = () => {
     setBotError(null);
     try {
       await stopBot({ token, marketId: selectedMarketId });
-      // Remove from running bots state
+      // Remove from running bots state and config
       setRunningBots((prev) => {
         const next = new Set(prev);
+        next.delete(selectedMarketId);
+        return next;
+      });
+      setBotConfigs((prev) => {
+        const next = new Map(prev);
         next.delete(selectedMarketId);
         return next;
       });
@@ -250,28 +308,32 @@ const EventPage = () => {
               <div className="text-sm text-slate-300">No markets found.</div>
             )}
 
-            <ul className="space-y-2 mt-1">
+            <ul className="space-y-3 mt-1">
               {markets.map((m) => {
                 const isBotRunning = runningBots.has(m.marketId);
                 const isSelected = selectedMarketId === m.marketId;
                 
                 return (
                   <li key={m.marketId}>
-                    <div className="flex items-center gap-2">
+                    <div className={`rounded-lg border transition-all ${
+                      isSelected 
+                        ? "border-amber-400/50 bg-amber-500/10 shadow-lg shadow-amber-500/10" 
+                        : "border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/10"
+                    }`}>
                       <button
                         type="button"
                         onClick={() => handleMarketClick(m.marketId)}
-                        className={`flex-1 text-left px-3 py-2 rounded-lg text-xs sm:text-sm transition border relative ${
-                          isSelected
-                            ? "bg-amber-500/20 border-amber-400 text-amber-100"
-                            : "bg-white/5 border-white/10 text-slate-100 hover:bg-white/10 hover:border-white/20"
-                        }`}
+                        className="w-full text-left px-4 py-3 rounded-lg transition"
                       >
-                        <div className="flex items-center gap-2">
-                          <span className="flex-1">{m.marketName || m.marketId}</span>
+                        <div className="flex items-center justify-between gap-3">
+                          <span className={`flex-1 text-sm sm:text-base font-medium ${
+                            isSelected ? "text-amber-100" : "text-slate-100"
+                          }`}>
+                            {m.marketName || m.marketId}
+                          </span>
                           {isBotRunning && (
                             <span
-                              className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-green-500/20 text-green-300 border border-green-400/30"
+                              className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] sm:text-xs font-semibold bg-green-500/20 text-green-300 border border-green-400/30"
                               title="Bot is running"
                             >
                               <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span>
@@ -280,36 +342,173 @@ const EventPage = () => {
                           )}
                         </div>
                       </button>
+                      
                       {isSelected && (
-                        <>
-                          {isBotRunning ? (
-                            <button
-                              type="button"
-                              onClick={handleStopBot}
-                              disabled={botStopping}
-                              className={`px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold border whitespace-nowrap transition ${
-                                botStopping
-                                  ? "bg-red-300 border-red-200 text-white cursor-wait"
-                                  : "bg-red-500 hover:bg-red-400 text-white border-red-300"
-                              }`}
-                            >
-                              {botStopping ? "Stopping..." : "Stop Bot"}
-                            </button>
+                        <div className="px-4 pb-4 pt-3 border-t border-white/10">
+                          {!isBotRunning ? (
+                            <div className="space-y-4">
+                              {/* Configuration Grid */}
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                {/* Bet Size */}
+                                <div className="flex flex-col">
+                                  <label className="text-xs font-semibold text-slate-200 mb-2 flex items-center gap-1.5">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                                    Bet Size
+                                  </label>
+                                  <div className="relative">
+                                    <input
+                                      type="number"
+                                      min="0.01"
+                                      step="0.01"
+                                      value={betSize}
+                                      onChange={(e) => setBetSize(e.target.value)}
+                                      disabled={botStarting}
+                                      className="w-full px-3 py-2.5 rounded-lg text-sm bg-white/10 border border-white/20 text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400/50 focus:border-amber-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                                      placeholder="1.00"
+                                    />
+                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 pointer-events-none font-medium">
+                                      £
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* UP Threshold */}
+                                <div className="flex flex-col">
+                                  <label className="text-xs font-semibold text-slate-200 mb-2 flex items-center gap-1.5">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-green-400"></span>
+                                    UP Threshold
+                                  </label>
+                                  <div className="space-y-1">
+                                    <input
+                                      type="number"
+                                      min="0.01"
+                                      step="0.01"
+                                      value={upThreshold}
+                                      onChange={(e) => setUpThreshold(e.target.value)}
+                                      disabled={botStarting}
+                                      className="w-full px-3 py-2.5 rounded-lg text-sm bg-white/10 border border-white/20 text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-green-400/50 focus:border-green-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                                      placeholder="5.00"
+                                    />
+                                    <p className="text-[10px] text-slate-400 leading-tight">
+                                      Bet BACK/UNDER when line moves up ≥ this value
+                                    </p>
+                                  </div>
+                                </div>
+
+                                {/* DOWN Threshold */}
+                                <div className="flex flex-col">
+                                  <label className="text-xs font-semibold text-slate-200 mb-2 flex items-center gap-1.5">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-red-400"></span>
+                                    DOWN Threshold
+                                  </label>
+                                  <div className="space-y-1">
+                                    <input
+                                      type="number"
+                                      min="0.01"
+                                      step="0.01"
+                                      value={downThreshold}
+                                      onChange={(e) => setDownThreshold(e.target.value)}
+                                      disabled={botStarting}
+                                      className="w-full px-3 py-2.5 rounded-lg text-sm bg-white/10 border border-white/20 text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-red-400/50 focus:border-red-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                                      placeholder="2.00"
+                                    />
+                                    <p className="text-[10px] text-slate-400 leading-tight">
+                                      Bet LAY/OVER when line moves down ≥ this value
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Start Bot Button */}
+                              <div className="flex justify-center pt-1">
+                                <button
+                                  type="button"
+                                  onClick={handleStartBot}
+                                  disabled={
+                                    botStarting || 
+                                    !betSize || 
+                                    parseFloat(betSize) <= 0 ||
+                                    !upThreshold ||
+                                    parseFloat(upThreshold) <= 0 ||
+                                    !downThreshold ||
+                                    parseFloat(downThreshold) <= 0
+                                  }
+                                  className={`px-8 py-3 rounded-lg text-sm font-semibold border transition-all shadow-md ${
+                                    botStarting || 
+                                    !betSize || 
+                                    parseFloat(betSize) <= 0 ||
+                                    !upThreshold ||
+                                    parseFloat(upThreshold) <= 0 ||
+                                    !downThreshold ||
+                                    parseFloat(downThreshold) <= 0
+                                      ? "bg-amber-300/50 border-amber-200/50 text-white/70 cursor-not-allowed"
+                                      : "bg-amber-500 hover:bg-amber-400 text-white border-amber-300 hover:shadow-lg hover:shadow-amber-500/20 active:scale-95"
+                                  }`}
+                                >
+                                  {botStarting ? (
+                                    <span className="flex items-center gap-2">
+                                      <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                                      Starting...
+                                    </span>
+                                  ) : (
+                                    "Start Bot"
+                                  )}
+                                </button>
+                              </div>
+                            </div>
                           ) : (
-                            <button
-                              type="button"
-                              onClick={handleStartBot}
-                              disabled={botStarting}
-                              className={`px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold border whitespace-nowrap transition ${
-                                botStarting
-                                  ? "bg-amber-300 border-amber-200 text-white cursor-wait"
-                                  : "bg-amber-500 hover:bg-amber-400 text-white border-amber-300"
-                              }`}
-                            >
-                              {botStarting ? "Starting..." : "Start Bot"}
-                            </button>
+                            <div className="flex items-center justify-between gap-4">
+                              <div className="flex flex-col gap-2">
+                                {(() => {
+                                  const config = botConfigs.get(m.marketId);
+                                  const displaySize = config?.size ?? betSize;
+                                  const displayUp = config?.upThreshold ?? upThreshold;
+                                  const displayDown = config?.downThreshold ?? downThreshold;
+                                  
+                                  return (
+                                    <div className="flex items-center gap-3 text-sm flex-wrap">
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="text-slate-400 font-medium">Size:</span>
+                                        <span className="text-amber-300 font-semibold">£{displaySize}</span>
+                                      </div>
+                                      <span className="text-slate-600">•</span>
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-green-400"></span>
+                                        <span className="text-slate-400 font-medium">UP:</span>
+                                        <span className="text-green-300 font-semibold">≥{displayUp}</span>
+                                      </div>
+                                      <span className="text-slate-600">•</span>
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-red-400"></span>
+                                        <span className="text-slate-400 font-medium">DOWN:</span>
+                                        <span className="text-red-300 font-semibold">≥{displayDown}</span>
+                                      </div>
+                                    </div>
+                                  );
+                                })()}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={handleStopBot}
+                                disabled={botStopping}
+                                className={`px-6 py-2.5 rounded-lg text-sm font-semibold border transition-all shadow-md ${
+                                  botStopping
+                                    ? "bg-red-300/50 border-red-200/50 text-white/70 cursor-wait"
+                                    : "bg-red-500 hover:bg-red-400 text-white border-red-300 hover:shadow-lg hover:shadow-red-500/20 active:scale-95"
+                                }`}
+                              >
+                                {botStopping ? (
+                                  <span className="flex items-center gap-2">
+                                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                                    Stopping...
+                                  </span>
+                                ) : (
+                                  "Stop Bot"
+                                )}
+                              </button>
+                            </div>
                           )}
-                        </>
+                        </div>
                       )}
                     </div>
                   </li>
