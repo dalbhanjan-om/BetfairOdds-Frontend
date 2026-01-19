@@ -30,7 +30,7 @@ const EventPage = () => {
   const [botConfigs, setBotConfigs] = useState(new Map()); // Map<marketId, { size, upThreshold, downThreshold }>
   const [betSize, setBetSize] = useState("1"); // Default bet size
   const [upThreshold, setUpThreshold] = useState("5"); // Default: Line moves up >= 5 for BACK (UNDER) bet
-  const [downThreshold, setDownThreshold] = useState("2"); // Default: Line moves down >= 2 for LAY (OVER) bet
+  const [downThreshold, setDownThreshold] = useState("3"); // Default: Line moves down >= 3 for LAY (OVER) bet
 
   // Redirect to listEvents if no event data
   if (!match) {
@@ -122,7 +122,7 @@ const EventPage = () => {
     if (selectedMarketId !== marketId) {
       setBetSize("1");
       setUpThreshold("5");
-      setDownThreshold("2");
+      setDownThreshold("3");
     }
     dispatch(setSelectedMarket(marketId));
     setBotError(null);

@@ -1,6 +1,6 @@
-import React from 'react'
+
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Calendar, TrendingUp, BookOpen } from 'lucide-react'
+import { Calendar, TrendingUp, Bot } from 'lucide-react'
 
 const Tabs = () => {
   const navigate = useNavigate()
@@ -8,8 +8,8 @@ const Tabs = () => {
 
   const tabs = [
     { id: 'events', label: 'Events', path: '/listEvents', icon: Calendar },
-    { id: 'profit', label: 'Profit', path: '/profit', icon: TrendingUp },
-    { id: 'rules', label: 'Rules', path: '/rules', icon: BookOpen },
+    { id: 'summary', label: 'Summary', path: '/summary', icon: TrendingUp },
+    { id: 'bot', label: 'Bot', path: '/bot', icon: Bot },
   ]
 
   const isActiveTab = (path) => location.pathname === path
