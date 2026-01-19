@@ -49,11 +49,9 @@ export default function BotPage() {
     };
 
     fetchStatus();
-    const interval = setInterval(fetchStatus, 5000);
 
     return () => {
       alive = false;
-      clearInterval(interval);
     };
   }, [token]);
 
@@ -96,7 +94,7 @@ export default function BotPage() {
               Running Bots
             </h1>
             <p className="text-sm text-slate-300 mt-1">
-              Live view of all active markets and their configuration.
+              View of all active markets and their configuration.
             </p>
           </div>
           <div className="shrink-0">
@@ -119,7 +117,7 @@ export default function BotPage() {
           <div className="flex items-center justify-between gap-3 mb-3">
             <h2 className="text-lg font-semibold">Bots</h2>
             {loading && (
-              <div className="text-xs text-slate-300">Refreshing…</div>
+              <div className="text-xs text-slate-300">Loading…</div>
             )}
           </div>
 
