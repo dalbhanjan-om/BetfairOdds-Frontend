@@ -2,9 +2,11 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import Login from "../pages/login/login";
 import ListEvent from "../pages/listEvents/listEvent";
 import EventPage from "../pages/listEvents/EventPage";
-import Profit from "../pages/Profit/Profit";
-import Rules from "../pages/Rules/Rules";
+
+import BotPage from "../pages/BotPage/BotPage";
+
 import ProtectedLayout from "../components/ProtectedLayout";
+import Summary from "../pages/Summary/Summary";
 
 
 const AppRoutes = () => {
@@ -32,18 +34,18 @@ const AppRoutes = () => {
           } 
         />
         <Route 
-          path="/profit" 
+          path="/summary" 
           element={
             <ProtectedLayout>
-              <Profit />
+              <Summary/>
             </ProtectedLayout>
           } 
         />
         <Route 
-          path="/rules" 
+          path="/bot" 
           element={
             <ProtectedLayout>
-              <Rules />
+              <BotPage />
             </ProtectedLayout>
           } 
         />
