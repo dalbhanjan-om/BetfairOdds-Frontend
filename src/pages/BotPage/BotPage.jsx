@@ -62,6 +62,8 @@ export default function BotPage() {
       marketId,
       running: !!info?.running,
       config: info?.config || null,
+      eventName: info?.eventName || null,
+      marketName: info?.marketName || null,
     }));
   }, [activeBots]);
 
@@ -145,9 +147,16 @@ export default function BotPage() {
                             <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
                             Active
                           </span>
-                          <span className="text-sm font-semibold text-white truncate">
-                            {bot.marketId}
-                          </span>
+                          <div className="flex flex-col min-w-0">
+                            {bot.eventName && (
+                              <span className="text-[11px] text-slate-300 truncate max-w-xs">
+                                {bot.eventName}
+                              </span>
+                            )}
+                            <span className="text-sm font-semibold text-white truncate max-w-xs">
+                              {bot.marketName || bot.marketId}
+                            </span>
+                          </div>
                         </div>
 
                         <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">

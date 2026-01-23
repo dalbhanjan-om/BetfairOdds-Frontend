@@ -150,12 +150,17 @@ const EventPage = () => {
     setBotStarting(true);
     setBotError(null);
     try {
+      const selectedMarket = markets.find((m) => m.marketId === selectedMarketId);
+
       await startBot({ 
         token, 
         marketId: selectedMarketId, 
         size,
         upThreshold: upThresh,
-        downThreshold: downThresh
+        downThreshold: downThresh,
+        // Pass human-friendly names so backend can return them in status
+        eventName: ev?.name || null,
+        marketName: selectedMarket?.marketName || null,
       });
       // Update running bots state and store configuration
       setRunningBots((prev) => new Set([...prev, selectedMarketId]));

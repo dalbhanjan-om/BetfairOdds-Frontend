@@ -23,12 +23,7 @@ function Login() {
 			const response = await betfairLogin({ username, password });
 			const { token, product, error: apiError } = response || {};
 
-			console.log("Login response:", { 
-				hasToken: !!token,
-				product,
-				status: response?.status,
-				apiError,
-			});
+			
 
 			if (token) {
 				dispatch(loginSuccess({ token }));
