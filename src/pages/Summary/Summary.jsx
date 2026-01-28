@@ -24,6 +24,7 @@ const Summary = () => {
   const [error, setError] = useState(null);
   const [fromDate, setFromDate] = useState("2026-01-18");
   const [toDate, setToDate] = useState(() => formatDate(new Date()));
+  const [size, setSize] = useState("");
 
   const buildToIso = (targetDate) => {
     const safeDate = targetDate > todayString ? todayString : targetDate;
@@ -33,12 +34,12 @@ const Summary = () => {
   };
 
   const fetchSummary = async (opts) => {
-    const { from, to } = opts;
+    const { from, to, size } = opts;
     try {
       setLoading(true);
       setError(null);
 
-      const data = await getSummary({ token, from, to });
+      const data = await getSummary({ token, from, to, size });
       const totalBets = data.totalBets || 0;
       const betsWon = data.betsWon || 0;
       const betsLost = data.betsLost || 0;
@@ -73,13 +74,13 @@ const Summary = () => {
     const fromIso = `${fromDate}T00:00:00.000Z`;
     const toIso = buildToIso(safeToDate);
 
-    fetchSummary({ from: fromIso, to: toIso });
+    fetchSummary({ from: fromIso, to: toIso, size });
   };
 
   useEffect(() => {
     const initialFrom = `${fromDate}T00:00:00.000Z`;
     const initialTo = buildToIso(toDate);
-    fetchSummary({ from: initialFrom, to: initialTo });
+    fetchSummary({ from: initialFrom, to: initialTo, size });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
@@ -119,6 +120,20 @@ const Summary = () => {
                 value={toDate}
                 max={todayString}
                 onChange={(e) => setToDate(e.target.value)}
+              />
+            </div>
+            <div className="flex flex-col">
+              <label className="text-xs font-semibold text-slate-200 mb-1">
+                Size
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="All"
+                className="rounded-lg bg-slate-800 border border-white/10 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-amber-400/60 w-24"
+                value={size}
+                onChange={(e) => setSize(e.target.value)}
               />
             </div>
             <button

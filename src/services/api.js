@@ -132,15 +132,20 @@ export async function getBotStatus({ token = null, marketId = null }) {
 }
 
 // Gets aggregated cleared-bets summary from backend
-export async function getSummary({ token = null, from, to }) {
+export async function getSummary({ token = null, from, to, size }) {
   const authToken = token || localStorage.getItem("betfairSessionToken");
   if (!authToken) {
     throw new Error("Missing session token. Please log in first.");
   }
 
+  const body = { from, to };
+  if (size !== undefined && size !== null && size !== '') {
+    body.size = size;
+  }
+
   const response = await axiosInstance.post(
     "/api/betfair/summary",
-    { from, to },
+    body,
     {
       headers: {
         "X-Authentication": authToken,
